@@ -127,7 +127,14 @@ To generate ES256 (ECDSA with P-256 curve) key pairs locally using OpenSSL, foll
    openssl ec -in private.pem -pubout -out public.pem
    ```
 
-3. **Verify Key Format**
+3. **Convert to PKCS8 Format (for JWT.io compatibility)**
+
+   ```bash
+   # Convert the EC private key to PKCS8 format
+   openssl pkcs8 -topk8 -nocrypt -in private.pem -out private_pkcs8.pem
+   ```
+
+4. **Verify Key Format**
 
    ```bash
    # View the private key content (keep this secure!)
@@ -137,7 +144,7 @@ To generate ES256 (ECDSA with P-256 curve) key pairs locally using OpenSSL, foll
    openssl ec -in public.pem -pubin -text -noout
    ```
 
-The generated keys will be in PEM format and can be used directly with the holder client or for manual testing.
+The generated keys will be in PEM format. Use the PKCS8 format private key (`private_pkcs8.pem`) with JWT.io for manual testing, and the original EC private key (`private.pem`) with the holder client.
 
 ## JWT Token Generation with JWT.io
 
