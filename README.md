@@ -1,65 +1,188 @@
 # Key Ownership Prover
 
-This project demonstrates a simple key ownership proof system using JWT (JSON Web Tokens) and JWK (JSON Web Keys). It consists of two components:
+A secure and efficient key ownership proof system implemented in Rust, using JWT (JSON Web Tokens) and ES256 (ECDSA with P-256 curve) for digital signatures. The system consists of a verifier service and a holder client that demonstrate cryptographic proof of key ownership.
 
-1. **Verifier Service**: A web service that generates nonces and verifies attestations
-2. **Holder Script**: A client that generates a key pair, signs a nonce with its private key, and sends the signature to the verifier
+## Project Overview
+
+The system implements a challenge-response protocol where:
+
+1. A holder requests a nonce from the verifier
+2. The holder signs the nonce with their private key
+3. The verifier validates the signature using the holder's public key
+
+### Components
+
+- **Verifier Service** (`src/main.rs`): A web service that:
+
+  - Generates secure nonces
+  - Validates JWT signatures
+  - Prevents replay attacks
+  - Exposes REST API endpoints
+
+- **Holder Client** (`src/bin/holder.rs`): A client that:
+  - Generates ES256 key pairs
+  - Requests nonces from the verifier
+  - Creates and signs JWTs
+  - Demonstrates key ownership
 
 ## Prerequisites
 
-- Rust and Cargo installed
-- Internet connection for dependency downloads
+- Rust and Cargo (latest stable version)
+- Docker and Docker Compose (for containerized deployment)
+- OpenSSL development packages
 
-## How to Run
+## Running the Project
 
-### Step 1: Build the Project
+### Local Development
 
-```bash
-cargo build
-```
+1. Build the project:
 
-### Step 2: Start the Verifier Service
+   ```bash
+   cargo build
+   ```
 
-In one terminal window, run:
+2. Start the verifier service:
 
-```bash
-cargo run --bin verifier
-```
+   ```bash
+   cargo run --bin verifier
+   ```
 
-This will start the verifier service on http://127.0.0.1:8080.
+   The service will start on `http://0.0.0.0:8080`
 
-### Step 3: Run the Holder Script
+3. Run the holder client:
+   ```bash
+   cargo run --bin holder
+   ```
 
-In another terminal window, run:
+### Docker Deployment
 
-```bash
-cargo run --bin holder
-```
-
-The holder script will:
-1. Generate a new ES256 key pair
-2. Request a nonce from the verifier
-3. Sign the nonce with the private key
-4. Send the signature and public key to the verifier for verification
-
-## How It Works
-
-1. The holder requests a nonce from the verifier
-2. The verifier generates a random nonce and sends it to the holder
-3. The holder signs the nonce with its private key and creates a JWT
-4. The holder sends the JWT and its public key (in JWK format) to the verifier
-5. The verifier validates the JWT signature using the provided public key
-6. The verifier checks if the nonce has been used before (to prevent replay attacks)
-7. The verifier returns the verification result
-
-## Security Features
-
-- Uses ES256 (ECDSA with P-256 curve and SHA-256) for digital signatures
-- Prevents replay attacks by tracking used nonces
-- Private key never leaves the holder
-- Uses standard JWT and JWK formats
+1. Build and start the services:
+   ```bash
+   docker-compose up --build
+   ```
+   This will start both the verifier and holder services in containers.
 
 ## API Endpoints
 
-- `GET /api/nonce`: Generates a new nonce
-- `POST /api/verify`: Verifies a JWT signature and checks the nonce
+### Verifier Service
+
+- `GET /api/nonce`
+
+  - Generates a new nonce for signing
+  - Returns: `{"nonce": "<uuid-v4>"}`
+
+- `POST /api/verify`
+
+  - Verifies a signed JWT and nonce
+  - Request body: `{"jwt": "<signed-token>", "public_key_pem": "<public-key>"}`
+  - Returns: `{"verified": boolean, "message": "string"}`
+
+- `GET /api/list-nonces`
+
+  - Lists all used nonces (for debugging)
+  - Returns: `{"nonce_count": number, "nonces": ["string"]}`
+
+- `POST /api/clear-nonces`
+  - Clears the used nonces store
+  - Returns: `{"message": "string"}`
+
+## Security Features
+
+1. **Cryptographic Security**
+
+   - Uses ES256 (ECDSA with P-256 curve and SHA-256)
+   - Implements industry-standard JWT format
+   - Private keys never leave the holder
+
+2. **Replay Attack Prevention**
+
+   - Tracks used nonces in memory
+   - Rejects previously used nonces
+   - Implements nonce clearing mechanism
+
+## Dependencies
+
+Key dependencies from `Cargo.toml`:
+
+- `actix-web`: Web framework
+- `jwt-simple`: JWT implementation
+- `jsonwebtoken`: JWT validation
+- `serde`: Serialization
+- `uuid`: Nonce generation
+- `reqwest`: HTTP client
+
+To generate ES256 (ECDSA with P-256 curve) key pairs locally using OpenSSL, follow these steps:
+
+1. **Generate Private Key**
+
+   ```bash
+   # Generate a private key using the P-256 curve
+   openssl ecparam -name prime256v1 -genkey -noout -out private.pem
+   ```
+
+2. **Extract Public Key**
+
+   ```bash
+   # Derive the public key from the private key
+   openssl ec -in private.pem -pubout -out public.pem
+   ```
+
+3. **Verify Key Format**
+
+   ```bash
+   # View the private key content (keep this secure!)
+   openssl ec -in private.pem -text -noout
+
+   # View the public key content
+   openssl ec -in public.pem -pubin -text -noout
+   ```
+
+The generated keys will be in PEM format and can be used directly with the holder client or for manual testing.
+
+## JWT Token Generation with JWT.io
+
+You can use [JWT.io](https://jwt.io) to manually generate and verify JWTs for testing and understanding the token structure:
+
+1. **Header Setup**
+
+   - Algorithm: Select "ES256" (ECDSA with P-256 and SHA-256)
+   - The header will look like: `{"alg": "ES256", "typ": "JWT"}`
+
+2. **Payload Configuration**
+
+   - Add the nonce received from the verifier
+   - Example payload: `{"nonce": "<received-nonce>", "exp": <170000000>}`
+
+3. **Signature Process**
+
+   - Paste your ES256 private key in PEM format
+   - The public key will be used for verification
+   - JWT.io will automatically generate the signature
+
+4. **Token Verification**
+   - Paste the complete JWT token
+   - Input the public key in PEM format
+   - JWT.io will verify the signature integrity
+
+## Error Handling
+
+The system implements comprehensive error handling:
+
+- JWT validation errors
+- Invalid public key format
+- Network communication errors
+- Nonce reuse attempts
+
+## Logging
+
+Uses the `env_logger` crate for configurable logging:
+
+- Set `RUST_LOG=info` for standard logs
+- Set `RUST_LOG=debug` for detailed debugging
+
+Logs include:
+
+- API request handling
+- Nonce generation and validation
+- JWT verification results
+- Error conditions
